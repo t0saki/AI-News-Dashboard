@@ -25,5 +25,11 @@ COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
+# Create data directory
+RUN mkdir -p /app/data
+
+# Declare volume for data persistence
+VOLUME /app/data
+
 # Run the application
 ENTRYPOINT ["uv", "run", "main.py"]

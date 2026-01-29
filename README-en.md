@@ -46,6 +46,9 @@ Instead of simple keyword matching, it leverages Large Language Models (LLMs) to
 3.  **Run**
     You can use the pre-built Docker image directly:
     ```bash
+    # ⚠️ Important: Create data directory
+    mkdir -p data
+
     # Pull image
     docker pull ghcr.io/t0saki/ai-news-dashboard:latest
     
@@ -53,16 +56,14 @@ Instead of simple keyword matching, it leverages Large Language Models (LLMs) to
     docker run -d \
       --name news-dashboard \
       --env-file .env \
-      -v $(pwd)/news.db:/app/news.db \
-      -v $(pwd)/dashboard.json:/app/dashboard.json \
-      -v $(pwd)/top5.json:/app/top5.json \
+      -v $(pwd)/data:/app/data \
       ghcr.io/t0saki/ai-news-dashboard:latest
     ```
 
     Or you can build it yourself:
     ```bash
     docker build -t news-dashboard .
-    docker run -d --env-file .env -v $(pwd)/news.db:/app/news.db -v $(pwd)/dashboard.json:/app/dashboard.json -v $(pwd)/top5.json:/app/top5.json news-dashboard
+    docker run -d --env-file .env -v $(pwd)/data:/app/data news-dashboard
     ```
 
 ### Method 2: Local Python

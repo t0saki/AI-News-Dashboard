@@ -15,3 +15,4 @@ test_*.py
 
 dashboard.json
 top5.json
+data/*

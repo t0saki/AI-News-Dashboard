@@ -47,6 +47,9 @@
 3.  **运行**
     可以直接使用预构建的 Docker 镜像：
     ```bash
+    # ⚠️ 关键步骤：创建数据目录
+    mkdir -p data
+
     # 拉取镜像
     docker pull ghcr.io/t0saki/ai-news-dashboard:latest
     
@@ -54,16 +57,14 @@
     docker run -d \
       --name news-dashboard \
       --env-file .env \
-      -v $(pwd)/news.db:/app/news.db \
-      -v $(pwd)/dashboard.json:/app/dashboard.json \
-      -v $(pwd)/top5.json:/app/top5.json \
+      -v $(pwd)/data:/app/data \
       ghcr.io/t0saki/ai-news-dashboard:latest
     ```
 
     或者你也可以选择自己构建：
     ```bash
     docker build -t news-dashboard .
-    docker run -d --env-file .env -v $(pwd)/news.db:/app/news.db -v $(pwd)/dashboard.json:/app/dashboard.json -v $(pwd)/top5.json:/app/top5.json news-dashboard
+    docker run -d --env-file .env -v $(pwd)/data:/app/data news-dashboard
     ```
 
 ### 方法二：本地 Python 运行

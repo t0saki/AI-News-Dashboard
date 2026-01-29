@@ -41,7 +41,7 @@ def generate_simplified_top5(items: list):
     # Save to dashboard_top5.json (same dir as dashboard.json)
     output_path = config.DASHBOARD_OUTPUT_PATH.replace('dashboard.json', 'top5.json')
     if output_path == config.DASHBOARD_OUTPUT_PATH: # Fallback if filename diff
-        output_path = "top5.json"
+        output_path = "data/top5.json"
         
     try:
         with open(output_path, 'w', encoding='utf-8') as f:

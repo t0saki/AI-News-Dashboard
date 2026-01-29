@@ -47,3 +47,4 @@ Thumbs.db
 dashboard.json
 top5.json
 news.db
+data/*

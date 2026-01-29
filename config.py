@@ -10,7 +10,7 @@ class ContactConfig(BaseModel):
 
 class AppConfig:
     # Database
-    DB_PATH: str = "news.db"
+    DB_PATH: str = "data/news.db"
     
     # AI Provider
     AI_BASE_URL: str = os.getenv("AI_BASE_URL", "https://api.openai.com/v1")
@@ -25,7 +25,7 @@ class AppConfig:
     FETCH_INTERVAL_SECONDS: int = int(os.getenv("FETCH_INTERVAL_SECONDS", "600")) # 10 minutes
     GRAVITY: float = float(os.getenv("GRAVITY", "1.1")) # Gravity factor (Lower = less time decay, 0.8-1.2 recommended for 72h window)
     RANKING_WINDOW_HOURS: int = int(os.getenv("RANKING_WINDOW_HOURS", "72")) # Hours to look back for ranking
-    DASHBOARD_OUTPUT_PATH: str = os.getenv("DASHBOARD_OUTPUT_PATH", "dashboard.json")
+    DASHBOARD_OUTPUT_PATH: str = os.getenv("DASHBOARD_OUTPUT_PATH", "data/dashboard.json")
     
     # Sources
     RSS_FEEDS: List[str] = [
