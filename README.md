@@ -44,7 +44,23 @@
     ```
     编辑 `.env` 文件，填入你的 OpenAI API Key 和其他配置。
 
-3.  **构建并运行**
+3.  **运行**
+    可以直接使用预构建的 Docker 镜像：
+    ```bash
+    # 拉取镜像
+    docker pull ghcr.io/t0saki/ai-news-dashboard:latest
+    
+    # 运行
+    docker run -d \
+      --name news-dashboard \
+      --env-file .env \
+      -v $(pwd)/news.db:/app/news.db \
+      -v $(pwd)/dashboard.json:/app/dashboard.json \
+      -v $(pwd)/top5.json:/app/top5.json \
+      ghcr.io/t0saki/ai-news-dashboard:latest
+    ```
+
+    或者你也可以选择自己构建：
     ```bash
     docker build -t news-dashboard .
     docker run -d --env-file .env -v $(pwd)/news.db:/app/news.db -v $(pwd)/dashboard.json:/app/dashboard.json -v $(pwd)/top5.json:/app/top5.json news-dashboard

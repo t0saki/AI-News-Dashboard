@@ -43,7 +43,23 @@ Instead of simple keyword matching, it leverages Large Language Models (LLMs) to
     ```
     Edit `.env` and fill in your OpenAI API Key and other settings.
 
-3.  **Build & Run**
+3.  **Run**
+    You can use the pre-built Docker image directly:
+    ```bash
+    # Pull image
+    docker pull ghcr.io/t0saki/ai-news-dashboard:latest
+    
+    # Run
+    docker run -d \
+      --name news-dashboard \
+      --env-file .env \
+      -v $(pwd)/news.db:/app/news.db \
+      -v $(pwd)/dashboard.json:/app/dashboard.json \
+      -v $(pwd)/top5.json:/app/top5.json \
+      ghcr.io/t0saki/ai-news-dashboard:latest
+    ```
+
+    Or you can build it yourself:
     ```bash
     docker build -t news-dashboard .
     docker run -d --env-file .env -v $(pwd)/news.db:/app/news.db -v $(pwd)/dashboard.json:/app/dashboard.json -v $(pwd)/top5.json:/app/top5.json news-dashboard
