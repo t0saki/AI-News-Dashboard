@@ -1,5 +1,6 @@
 import feedparser
 import time
+import calendar
 from datetime import datetime
 from typing import List, Dict, Optional
 
@@ -8,9 +9,9 @@ class RSSFetcher:
     def parse_date(self, entry) -> float:
         """Parse published date to timestamp."""
         if hasattr(entry, 'published_parsed') and entry.published_parsed:
-            return time.mktime(entry.published_parsed)
+            return calendar.timegm(entry.published_parsed)
         if hasattr(entry, 'updated_parsed') and entry.updated_parsed:
-            return time.mktime(entry.updated_parsed)
+            return calendar.timegm(entry.updated_parsed)
         return time.time()
 
     def fetch(self, url: str) -> List[Dict]:
