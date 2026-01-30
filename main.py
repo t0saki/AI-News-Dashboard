@@ -28,27 +28,27 @@ def format_time_ago(timestamp: float) -> str:
     else:
         return f"{int(diff // 86400)}D"
 
-def generate_simplified_top5(items: list):
+def generate_simplified_top5(items: list, topn = 5):
     """Generate simplified top 5 JSON."""
     top5 = []
     # Take up to 5 items
-    for item, _ in items[:5]:
+    for item, _ in items[:topn]:
         top5.append({
             "title": item.get('l2_title_zh') or item.get('title'),
             "meta": format_time_ago(item.get('published_at'))
         })
     
     # Save to dashboard_top5.json (same dir as dashboard.json)
-    output_path = config.DASHBOARD_OUTPUT_PATH.replace('dashboard.json', 'top5.json')
+    output_path = config.DASHBOARD_OUTPUT_PATH.replace('dashboard.json', f'top{topn}.json')
     if output_path == config.DASHBOARD_OUTPUT_PATH: # Fallback if filename diff
-        output_path = "data/top5.json"
+        output_path = f"data/top{topn}.json"
         
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(top5, f, ensure_ascii=False, indent=2)
-        print(f"Top 5 saved to {output_path}")
+        print(f"Top {topn} saved to {output_path}")
     except Exception as e:
-        print(f"Error saving top5.json: {e}")
+        print(f"Error saving {output_path}: {e}")
 
 def calculate_sleep_seconds(interval: int) -> float:
     """Calculate seconds until next aligned interval."""
@@ -134,7 +134,7 @@ def main():
                 print(f"Dashboard saved to {config.DASHBOARD_OUTPUT_PATH}")
 
                 # Generate Simplified Top 5
-                generate_simplified_top5(ranked)
+                generate_simplified_top5(ranked, 10)
 
             # Schedule Sleep
             sleep_sec = calculate_sleep_seconds(config.FETCH_INTERVAL_SECONDS)

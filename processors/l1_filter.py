@@ -46,7 +46,7 @@ class L1Filter:
 
         if not response_text:
             print("L1: No response from AI.")
-            return
+            return 0
 
         try:
             # Handle potential markdown fencing
@@ -74,34 +74,57 @@ class L1Filter:
                 context = item_data.get('context')
                 
                 # Find the original item by title
-                # Simple exact match first
                 matched_id = None
+                
+                def normalize(s):
+                    if not s: return ""
+                    # Remove common punctuation and whitespace
+                    import re
+                    s = s.lower().strip()
+                    s = re.sub(r'[^\w\s\u4e00-\u9fff]', '', s) # Keep alphanumeric and Chinese characters
+                    return "".join(s.split())
+
+                target_title_norm = normalize(title)
+                
+                # 1. Try exact normalized match
                 for candidate in items:
-                    # Normalize for comparison
-                    if candidate['title'].strip() == title.strip():
+                    if normalize(candidate['title']) == target_title_norm:
                         matched_id = candidate['id']
                         break
+                
+                # 2. Try substring match if no exact match (AI might truncate or prepend)
+                if not matched_id:
+                    for candidate in items:
+                        candidate_norm = normalize(candidate['title'])
+                        if target_title_norm in candidate_norm or candidate_norm in target_title_norm:
+                            matched_id = candidate['id']
+                            break
                 
                 # If valid match
                 if matched_id:
                     processed_titles.add(matched_id)
                     # Decide status
-                    status = 'l1_done' if score >= 70 else 'filtered'
+                    # According to prompts/l1.md: "Only discard items that are clearly irrelevant (Score < 45)"
+                    status = 'l1_done' if score >= 45 else 'filtered'
                     reason = f"Category: {category}. Context: {context}"
                     db.update_l1_result(matched_id, score, reason, status)
                     print(f"  - Update {matched_id}: Score {score} ({status})")
 
-            for category in ["AI_Algorithms", "Aerospace_HardTech", "Major_Industry_Moves"]:
-                if category in data:
-                    for item_data in data[category]:
+            # Iterate through all categories in the response JSON
+            for category, items_in_category in data.items():
+                if isinstance(items_in_category, list):
+                    for item_data in items_in_category:
                         update_item(item_data, category)
             
-            # Mark others as filtered (low score, implicit) if not in list?
-            # The prompt says: "Discard any item with a Score < 70."
-            # So if it's not in the output, it's filtered.
+            # Mark others as filtered (low score, implicit) if not in list
+            # The prompt says: "Only discard items that are clearly irrelevant (Score < 45)"
             for item in items:
                 if item['id'] not in processed_titles:
                     db.update_l1_result(item['id'], 0, "Implicitly filtered by AI (Low Score)", "filtered")
+                else:
+                    # Double check if the score was actually enough to pass
+                    # The update_item already set status, but let's ensure the threshold matches 45
+                    pass
                     
         except json.JSONDecodeError:
             print(f"L1: Failed to parse JSON: {response_text}")
