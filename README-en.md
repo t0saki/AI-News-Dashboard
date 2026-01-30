@@ -8,7 +8,7 @@
 
 > 🚀 **Intelligent, AI-Driven News Aggregator & Curator for Tech Professionals.**
 
-[English README](README-en.md) | [中文说明](README.md)
+Demo Web: [AI News Dashboard](https://kindledash.t0saki.com/)
 
 ## 📖 Introduction
 

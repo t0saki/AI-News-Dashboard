@@ -9,7 +9,7 @@
 > 🚀 **专为技术极客设计的 AI 驱动新闻聚合与筛选系统**。
 > Intelligent news curator for technical professionals.
 
-[English README](README-en.md) | [中文说明](README.md)
+Demo Web: [AI News Dashboard](https://kindledash.t0saki.com/)
 
 ## 📖 项目简介 (Introduction)
 
