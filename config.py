@@ -17,7 +17,12 @@ class AppConfig:
     AI_API_KEY: str = os.getenv("AI_API_KEY", "")
     AI_MODEL_L1: str = os.getenv("AI_MODEL_L1", "gpt-4o-mini") # Fast model for L1
     AI_MODEL_L2: str = os.getenv("AI_MODEL_L2", "gpt-4o") # Strong model for L2
-    MAX_L1_LOOPS: int = int(os.getenv("MAX_L1_LOOPS", "5")) # Number of L1 batches to process per cycle
+    # Hard safety caps on how many L1/L2 batches a single cycle may run. The
+    # processors always drain each batch they touch, so these are normally not
+    # reached; they exist purely to bound the loop if a batch ever fails to make
+    # progress, so the pipeline can never hammer the LLM indefinitely.
+    MAX_L1_LOOPS: int = int(os.getenv("MAX_L1_LOOPS", "40")) # Max L1 batches per cycle
+    MAX_L2_LOOPS: int = int(os.getenv("MAX_L2_LOOPS", "40")) # Max L2 batches per cycle
     L1_BATCH_SIZE: int = int(os.getenv("L1_BATCH_SIZE", "30"))
     L2_BATCH_SIZE: int = int(os.getenv("L2_BATCH_SIZE", "20")) # Max items to send to L2 at once
     AI_MAX_RETRIES: int = int(os.getenv("AI_MAX_RETRIES", "2"))

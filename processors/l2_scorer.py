@@ -1,4 +1,5 @@
 import os
+import time
 from config import config
 from database import db
 from ai_service import ai_service
@@ -24,46 +25,48 @@ class L2Scorer:
         if not new_items:
             return 0
 
-        print(f"L2: Processing {len(new_items)} new items...")
-        
-        # Prepare Top 20 context for deduplication
+        # Prepare Top 20 context for deduplication (computed once, reused across
+        # any binary-split recursion below).
         recent_processed = db.get_recent_processed_news(hours=config.RANKING_WINDOW_HOURS)
         ranked_context = []
         for rp in recent_processed:
             g_score = calculate_gravity_score(rp['l2_score'], rp['published_at'], config.GRAVITY)
             ranked_context.append((rp, g_score))
-        
+
         ranked_context.sort(key=lambda x: x[1], reverse=True)
         top_20_old_items = [x[0] for x in ranked_context[:20]]
-        
-        # Combine items
+
+        # _score() ALWAYS drains every new item it is handed (scored, merged, or
+        # dropped), so the caller's drain loop terminates instead of re-sending a
+        # stuck batch forever.
+        self._score(new_items, top_20_old_items)
+        return len(new_items)
+
+    def _ask(self, new_items: list, top_20_old_items: list):
+        """Build the L2 prompt, call the model (with one strict-JSON reprompt on
+        failure), and return (data, clean_json, response_text)."""
         all_batch_items = top_20_old_items + new_items
-        
-        # Prepare input with IDs and Tags
+
         news_list_str = ""
-        import time # Ensure time is imported
-        
-        for idx, item in enumerate(all_batch_items):
+        for item in all_batch_items:
             is_new = "NEW" if item in new_items else f"OLD, Score: {item.get('l2_score', 0)}"
-            
-            # Calculate readable time
+
             pub_time = item.get('published_at', time.time())
             diff_seconds = int(time.time() - pub_time)
             hours = diff_seconds // 3600
             minutes = (diff_seconds % 3600) // 60
             time_str = f"{hours} hours {minutes} minutes ago" if hours > 0 else f"{minutes} minutes ago"
-            
-            # Trim summary 
+
             summary_snippet = (item.get('summary') or '')[:500]
             if len(item.get('summary') or '') > 500:
                 summary_snippet += "..."
-                
+
             news_list_str += f"- [ID: {item['id']}] [{is_new}] \"{item['title']}\" ({item['source_name']}) - {item['url']} - Published: {time_str}\n"
-            
+
             if summary_snippet:
                 summary_snippet = " ".join(summary_snippet.split())
                 news_list_str += f"  Snippet: {summary_snippet}\n"
-                
+
             if item.get('l2_summary'):
                 news_list_str += f"  Existing Summary: {item['l2_summary']}\n"
 
@@ -81,11 +84,8 @@ class L2Scorer:
             response_format={"type": "json_object"}
         )
 
-        if not response_text:
-            print("L2: No response.")
-            return len(new_items)
-
-        try:
+        data, clean_json = (None, None)
+        if response_text:
             data, clean_json = parse_json_response(response_text)
             if not isinstance(data, dict):
                 print("L2: Retry with strict JSON reprompt...")
@@ -98,23 +98,30 @@ class L2Scorer:
                     model=self.model,
                     response_format={"type": "json_object"}
                 )
-                if not response_text:
-                    print("L2: No response after fallback reprompt.")
-                    return len(new_items)
-                data, clean_json = parse_json_response(response_text)
+                if response_text:
+                    data, clean_json = parse_json_response(response_text)
 
-            if not isinstance(data, dict):
-                print(f"L2: Failed to parse JSON: {response_text}")
-                return len(new_items)
+        return data, clean_json, response_text
 
-            feed_items = data.get('feed', [])
-            if not isinstance(feed_items, list):
-                print(f"L2: Invalid feed payload: {clean_json}")
-                return len(new_items)
+    def _score(self, new_items: list, top_20_old_items: list):
+        if not new_items:
+            return
 
-            processed_primary_ids = set()
-            processed_merged_ids = set()
+        print(f"L2: Processing {len(new_items)} new items...")
+        data, clean_json, response_text = self._ask(new_items, top_20_old_items)
 
+        feed_items = data.get('feed', []) if isinstance(data, dict) else None
+        if not isinstance(feed_items, list):
+            # Model returned nothing usable (empty / refusal / garbage). Isolate
+            # the offending item(s) via binary split so one item can't poison the
+            # batch or spin the loop.
+            self._handle_unparseable(new_items, top_20_old_items, clean_json or response_text)
+            return
+
+        processed_primary_ids = set()
+        processed_merged_ids = set()
+
+        try:
             for feed_item in feed_items:
                 if not isinstance(feed_item, dict):
                     continue
@@ -157,17 +164,27 @@ class L2Scorer:
                         db.update_l2_result(mid, 0, "Deduplicated/Merged", "", "")
                         processed_merged_ids.add(mid)
                         print(f"  - L2 Merged {mid} -> {primary_id}")
-
-            for item in new_items:
-                iid = item['id']
-                if iid not in processed_primary_ids and iid not in processed_merged_ids:
-                    print(f"  - L2 Dropped NEW {iid}: {item['title']}")
-                    db.update_l2_result(iid, 0, "Dropped by AI", "", "")
-
         except Exception as e:
             print(f"L2 Error: {e}")
-            
-        return len(new_items)
+
+        # Any NEW item the model didn't explicitly cover is dropped, which also
+        # drains it from the pending-L2 queue.
+        for item in new_items:
+            iid = item['id']
+            if iid not in processed_primary_ids and iid not in processed_merged_ids:
+                print(f"  - L2 Dropped NEW {iid}: {item['title']}")
+                db.update_l2_result(iid, 0, "Dropped by AI", "", "")
+
+    def _handle_unparseable(self, new_items: list, top_20_old_items: list, response_text):
+        preview = (str(response_text) if response_text else "").strip().replace("\n", " ")[:120]
+        if len(new_items) > 1:
+            mid = len(new_items) // 2
+            print(f"L2: Unparseable/refused response for {len(new_items)} items (resp={preview!r}); binary-splitting to isolate.")
+            self._score(new_items[:mid], top_20_old_items)
+            self._score(new_items[mid:], top_20_old_items)
+        else:
+            it = new_items[0]
+            print(f"L2: Isolated unparseable/refused item id={it['id']} ({it.get('source_name')}): {it.get('title')!r}; marking dropped.")
+            db.update_l2_result(it['id'], 0, "Dropped by AI (L2 unparseable/refused)", "", "")
 
 l2_scorer = L2Scorer()
-

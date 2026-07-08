@@ -90,20 +90,27 @@ def main():
             print(f"Fetched {items_added} new items.")
             
             # 2. L1 Filter
-            # Process ALL pending items
+            # Drain pending items batch by batch. process_pending() always makes
+            # progress (it drains every batch it processes), so this normally ends
+            # when count == 0. MAX_L1_LOOPS is a hard safety cap so a pathological
+            # batch can never spin the loop and hammer the LLM indefinitely.
             print("L1: Starting batch processing...")
-            while True:
+            for _ in range(config.MAX_L1_LOOPS):
                 count = l1_filter.process_pending(batch_size=config.L1_BATCH_SIZE)
                 if count == 0:
                     break
-            
+            else:
+                print(f"L1: Hit MAX_L1_LOOPS ({config.MAX_L1_LOOPS}); items may remain pending until next cycle.")
+
             # 3. L2 Scorer
-            # Process ALL items that passed L1
+            # Process ALL items that passed L1 (same safety cap as L1).
             print("L2: Starting batch processing...")
-            while True:
+            for _ in range(config.MAX_L2_LOOPS):
                 count = l2_scorer.process_l1_passed()
                 if count == 0:
                     break
+            else:
+                print(f"L2: Hit MAX_L2_LOOPS ({config.MAX_L2_LOOPS}); items may remain pending until next cycle.")
             
             # 4. Display/Ranking (Preview)
             # Fetch all processed items from last window
