@@ -34,6 +34,21 @@ class AppConfig:
     # "on" always sends it; "off" never sends it.
     AI_RESPONSE_FORMAT_MODE: str = os.getenv("AI_RESPONSE_FORMAT_MODE", "auto").lower()
 
+    # Feed fetching. feedparser's own downloader has no timeout, so a half-open
+    # connection can block the whole pipeline forever. FEED_TIMEOUT_SECONDS is a
+    # wall-clock budget for one feed (connect + transfer); FEED_SOCKET_TIMEOUT_SECONDS
+    # bounds each individual socket operation.
+    FEED_TIMEOUT_SECONDS: float = float(os.getenv("FEED_TIMEOUT_SECONDS", "300")) # 5 minutes per feed
+    FEED_SOCKET_TIMEOUT_SECONDS: float = float(os.getenv("FEED_SOCKET_TIMEOUT_SECONDS", "60"))
+    FEED_MAX_BYTES: int = int(os.getenv("FEED_MAX_BYTES", str(32 * 1024 * 1024)))
+
+    # Watchdog: if a single cycle stops making progress (stuck network read, hung
+    # LLM call, ...), exit so the container restart policy brings us back instead
+    # of the process sitting alive-but-dead. Disarmed while sleeping between cycles.
+    WATCHDOG_ENABLED: bool = os.getenv("WATCHDOG_ENABLED", "true").lower() in ("true", "1", "yes")
+    CYCLE_TIMEOUT_SECONDS: float = float(os.getenv("CYCLE_TIMEOUT_SECONDS", "3600")) # 1 hour per cycle
+    WATCHDOG_CHECK_INTERVAL_SECONDS: float = float(os.getenv("WATCHDOG_CHECK_INTERVAL_SECONDS", "30"))
+
     # Application Logic
     FETCH_INTERVAL_SECONDS: int = int(os.getenv("FETCH_INTERVAL_SECONDS", "600")) # 10 minutes
     GRAVITY: float = float(os.getenv("GRAVITY", "1.1")) # Gravity factor (Lower = less time decay, 0.8-1.2 recommended for 72h window)

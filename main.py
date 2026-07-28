@@ -1,7 +1,10 @@
+import os
 import time
 import signal
 import sys
+import threading
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 from config import config
 from sources.manager import source_manager
 from processors.l1_filter import l1_filter
@@ -13,6 +16,50 @@ import json
 def signal_handler(sig, frame):
     print("\nExiting...")
     sys.exit(0)
+
+# Watchdog state. _cycle_started_at is a monotonic timestamp while a cycle is
+# running and None while we sleep between cycles (sleeping is not a stall).
+_watchdog_lock = threading.Lock()
+_cycle_started_at: Optional[float] = None
+
+def arm_watchdog():
+    global _cycle_started_at
+    with _watchdog_lock:
+        _cycle_started_at = time.monotonic()
+
+def disarm_watchdog():
+    global _cycle_started_at
+    with _watchdog_lock:
+        _cycle_started_at = None
+
+def watchdog_loop():
+    """
+    Kills the process if a cycle hangs. Any single blocking call (a stuck socket
+    read, an LLM request that never returns) would otherwise leave the container
+    Up-but-brain-dead, with data silently frozen. os._exit skips cleanup on
+    purpose: the point is to die now and let the restart policy recover.
+    """
+    while True:
+        time.sleep(config.WATCHDOG_CHECK_INTERVAL_SECONDS)
+        with _watchdog_lock:
+            started = _cycle_started_at
+        if started is None:
+            continue
+        elapsed = time.monotonic() - started
+        if elapsed > config.CYCLE_TIMEOUT_SECONDS:
+            print(f"WATCHDOG: cycle stuck for {elapsed:.0f}s "
+                  f"(limit {config.CYCLE_TIMEOUT_SECONDS:.0f}s); exiting for restart.",
+                  flush=True)
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(1)
+
+def start_watchdog():
+    if not config.WATCHDOG_ENABLED:
+        print("Watchdog: disabled")
+        return
+    threading.Thread(target=watchdog_loop, name="cycle-watchdog", daemon=True).start()
+    print(f"Watchdog: enabled (cycle timeout {config.CYCLE_TIMEOUT_SECONDS:.0f}s)")
 
 def format_time_ago(timestamp: float) -> str:
     """Format timestamp to simplified time ago (e.g. 1H, 2D, 30M)."""
@@ -81,8 +128,11 @@ def main():
     if config.QUIET_HOURS_ENABLED:
         print(f"Quiet Hours: {config.QUIET_HOURS_START}:00-{config.QUIET_HOURS_END}:00 (UTC+{config.QUIET_HOURS_TZ_OFFSET}), {config.QUIET_HOURS_MULTIPLIER}x slower")
 
+    start_watchdog()
+
     while True:
         try:
+            arm_watchdog()
             print(f"--- Cycle Start: {datetime.fromtimestamp(time.time()).strftime('%H:%M:%S')} ---")
             
             # 1. Fetch
@@ -168,9 +218,11 @@ def main():
             sleep_sec = calculate_sleep_seconds(effective)
             quiet_tag = " [Quiet Hours]" if quiet else ""
             print(f"Sleeping for {sleep_sec:.1f} seconds (interval={effective}s{quiet_tag}, next at {datetime.fromtimestamp(time.time() + sleep_sec).strftime('%H:%M:%S')})...")
+            disarm_watchdog()
             time.sleep(sleep_sec)
-            
+
         except Exception as e:
+            disarm_watchdog()
             print(f"Main Loop Error: {e}")
             time.sleep(60)
 

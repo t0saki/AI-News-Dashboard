@@ -15,6 +15,8 @@ uv run main.py
 # Run tests (no test framework; plain scripts)
 uv run python tests_response_utils.py
 uv run python tests_schema_compat.py
+uv run python tests_binary_split.py
+uv run python tests_feed_timeout.py
 
 # Install/sync dependencies
 uv sync
@@ -28,7 +30,9 @@ docker run --env-file .env -v $(pwd)/data:/app/data news-dashboard
 
 The main loop in `main.py` runs on a configurable interval (`FETCH_INTERVAL_SECONDS`):
 
-1. **Fetch** — `sources/manager.py` iterates RSS feeds via `sources/rss.py` (feedparser), inserts new items into SQLite with status `pending`.
+1. **Fetch** — `sources/manager.py` iterates RSS feeds via `sources/rss.py`, inserts new items into SQLite with status `pending`. Feeds are downloaded by hand (urllib + per-socket timeout + total wall-clock budget) rather than by `feedparser.parse(url)`, which has no timeout at all.
+
+A watchdog thread (`main.py`) arms on each cycle and disarms while sleeping; if a cycle exceeds `CYCLE_TIMEOUT_SECONDS` the process exits so the container restart policy recovers it.
 2. **L1 Filter** — `processors/l1_filter.py` batches pending items, sends to a fast LLM (e.g. gpt-4o-mini) with prompts from `prompts/user_profile.md` + `prompts/l1_rules.md`. Items scoring ≥70 get status `l1_done`; others become `filtered`.
 3. **L2 Scorer** — `processors/l2_scorer.py` takes `l1_done` items plus the current top-20 ranked items (for dedup context), sends to a stronger LLM with `prompts/l2_rules.md`. Produces Chinese title, summary, score, category. Status becomes `processed`. Duplicate stories are merged.
 4. **Ranking** — `ranking.py` computes gravity scores: `score × (offset / (age_hours + offset))^effective_gravity` with score-adaptive decay (high scores decay slower). Results written to `data/dashboard.json` and `data/top5.json`.
